@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Binance Top Gainers Tracker</title>
+    <!-- Tailwind CSS CDN for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for the Inter font and overall layout */
+        body {
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #1a202c; /* Dark background for a sleek look */
+            color: #e2e8f0; /* Light text color */
+            padding: 1rem;
+            box-sizing: border-box;
+        }
+
+        /* Card background */
+        .card-bg {
+            background-color: #2d3748; /* Slightly lighter dark for cards */
+        }
+
+        /* Highlight common coins */
+        .highlighted-coin {
+            color: #ef4444; /* Red for highlighted coins */
+            font-weight: bold;
+        }
+
+        /* Spinner animation */
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.2);
+            border-left-color: #63b3ed; /* Blue for spinner */
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Table styling */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #4a5568; /* Darker border for rows */
+        }
+        th {
+            background-color: #2c5282; /* Darker blue for table headers */
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.875rem;
+        }
+        tr:last-child td {
+            border-bottom: none;
+        }
+        .gain-positive {
+            color: #48bb78; /* Green for positive gain */
+        }
+        .gain-negative {
+            color: #ef4444; /* Red for negative gain (though we're tracking gainers, good to have) */
+        }
+
+        /* Modal specific styles */
+        .modal {
+            display: none; /* Hidden by default */
+            position: fixed; /* Stay in place */
+            z-index: 1000; /* Sit on top */
+            left: 0;
+            top: 0;
+            width: 100%; /* Full width */
+            height: 100%; /* Full height */
+            overflow: auto; /* Enable scroll if needed */
+            background-color: rgba(0,0,0,0.6); /* Black w/ opacity */
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background-color: #2d3748; /* Card background color */
+            margin: auto;
+            padding: 2rem;
+            border-radius: 0.75rem; /* Rounded corners */
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+            max-width: 90%;
+            width: 500px;
+            text-align: left;
+            position: relative;
+            color: #e2e8f0;
+        }
+        .close-button {
+            position: absolute;
+            top: 0.75rem;
+            right: 0.75rem;
+            font-size: 1.5rem;
+            font-weight: bold;
+            cursor: pointer;
+            color: #9ca3af; /* Gray color */
+        }
+        .close-button:hover {
+            color: #cbd5e0; /* Lighter gray on hover */
+        }
+        .modal-body {
+            max-height: 70vh; /* Limit height for scrollable content */
+            overflow-y: auto;
+            padding-right: 10px; /* Space for scrollbar */
+        }
+        .modal-body::-webkit-scrollbar {
+            width: 8px;
+        }
+        .modal-body::-webkit-scrollbar-track {
+            background: #4a5568;
+            border-radius: 10px;
+        }
+        .modal-body::-webkit-scrollbar-thumb {
+            background: #63b3ed;
+            border-radius: 10px;
+        }
+        .modal-body::-webkit-scrollbar-thumb:hover {
+            background: #4299e1;
+        }
+
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .tracker-container {
+                flex-direction: column;
+            }
+            .interval-card {
+                width: 100%;
+                margin-bottom: 1rem;
+            }
+            .interval-card:last-child {
+                margin-bottom: 0;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 flex items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-5xl bg-gray-800 p-8 rounded-xl shadow-2xl">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-extrabold text-white">Binance Top Gainers Tracker</h1>
+            <button id="refreshDataBtn"
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out flex items-center">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004 12v1m7 1.5l-3 3m0 0l3 3m-3-3H20"></path></svg>
+                <span id="refreshBtnText">Refresh Data</span>
+            </button>
+        </div>
+
+        <p class="text-gray-400 text-sm mb-4">
+            <span class="font-semibold">Note:</span> This tracker fetches data from Binance's public API. The "Previous Interval" data is stored in your browser's session and will reset if you close this tab.
+        </p>
+        <p id="lastUpdated" class="text-gray-400 text-sm mb-6">Last updated: --</p>
+        <p id="nextRefresh" class="text-gray-400 text-sm mb-6">Next refresh in: --</p>
+
+
+        <div id="loadingIndicator" class="text-center py-8 hidden">
+            <span class="spinner"></span> <span class="text-lg text-blue-400">Fetching data...</span>
+        </div>
+
+        <div id="errorMessage" class="bg-red-800 text-white p-4 rounded-lg hidden mb-6">
+            <p class="font-bold">Error:</p>
+            <p id="errorText"></p>
+        </div>
+
+        <div class="flex flex-col md:flex-row gap-6 tracker-container">
+            <!-- Current 24h Interval -->
+            <div class="flex-1 card-bg p-6 rounded-lg shadow-lg interval-card">
+                <h2 class="text-xl font-semibold text-white mb-4">Current Interval (24h Change)</h2>
+                <p id="currentIntervalTime" class="text-gray-400 text-sm mb-4">--</p>
+                <div class="overflow-x-auto">
+                    <table id="currentTable">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Symbol</th>
+                                <th>Price</th>
+                                <th>Gain %</th>
+                                <th>Info</th> <!-- New column for LLM feature -->
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Data will be inserted here by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Previous 24h Interval -->
+            <div class="flex-1 card-bg p-6 rounded-lg shadow-lg interval-card">
+                <h2 class="text-xl font-semibold text-white mb-4">Previous Interval (24h Change)</h2>
+                <p id="previousIntervalTime" class="text-gray-400 text-sm mb-4">--</p>
+                <div class="overflow-x-auto">
+                    <table id="previousTable">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Symbol</th>
+                                <th>Price</th>
+                                <th>Gain %</th>
+                                <th>Info</th> <!-- New column for LLM feature -->
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Data will will be inserted here by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- New section for Previous Interval Coin List -->
+        <div id="previousCoinListContainer" class="mt-8 card-bg p-6 rounded-lg shadow-lg hidden">
+            <h2 class="text-xl font-semibold text-white mb-4">Coins in Previous Interval:</h2>
+            <p id="previousCoinListTime" class="text-gray-400 text-sm mb-4">Snapshot from: --</p>
+            <div id="previousCoinList" class="flex flex-wrap gap-2 text-lg">
+                <!-- Previous coin symbols will be listed here -->
+            </div>
+        </div>
+
+    </div>
+
+    <!-- LLM Analysis Modal -->
+    <div id="analysisModal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" onclick="closeAnalysisModal()">&times;</span>
+            <h2 id="analysisModalTitle" class="text-2xl font-bold mb-4"></h2>
+            <div id="analysisModalBody" class="modal-body text-gray-300">
+                <div id="analysisLoading" class="text-center py-4 hidden">
+                    <span class="spinner"></span> <span class="text-blue-400">Generating analysis...</span>
+                </div>
+                <p id="analysisText"></p>
+            </div>
+            <button onclick="closeAnalysisModal()" class="mt-6 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700">Close</button>
+        </div>
+    </div>
+
+    <script>
+        const BINANCE_API_URL = 'https://api.binance.com/api/v3/ticker/24hr';
+        const BINANCE_KLINES_API_URL = 'https://api.binance.com/api/v3/klines'; // New API endpoint for historical data
+        const TOP_N_GAINERS = 5; // Number of top gainers to display
+        const AUTO_REFRESH_INTERVAL_MINUTES = 5; // Auto-refresh every 5 minutes
+
+        const currentTableBody = document.querySelector('#currentTable tbody');
+        const previousTableBody = document.querySelector('#previousTable tbody');
+        const lastUpdatedText = document.getElementById('lastUpdated');
+        const nextRefreshText = document.getElementById('nextRefresh'); // New element for next refresh time
+        const currentIntervalTime = document.getElementById('currentIntervalTime');
+        const previousIntervalTime = document.getElementById('previousIntervalTime');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const errorMessage = document.getElementById('errorMessage');
+        const errorText = document.getElementById('errorText');
+        const refreshDataBtn = document.getElementById('refreshDataBtn');
+        const refreshBtnText = document.getElementById('refreshBtnText');
+
+        // New elements for Previous Interval Coin List
+        const previousCoinListContainer = document.getElementById('previousCoinListContainer');
+        const previousCoinListTime = document.getElementById('previousCoinListTime');
+        const previousCoinList = document.getElementById('previousCoinList');
+
+
+        // Modal elements for LLM analysis
+        const analysisModal = document.getElementById('analysisModal');
+        const analysisModalTitle = document.getElementById('analysisModalTitle');
+        const analysisModalBody = document.getElementById('analysisModalBody');
+        const analysisText = document.getElementById('analysisText');
+        const analysisLoading = document.getElementById('analysisLoading');
+
+        let currentGainers = [];
+        let previousGainers = [];
+        let refreshTimer; // To hold the interval ID for auto-refresh
+
+        // Function to format date and time
+        function formatDateTime(date) {
+            if (!date) return '--';
+            const options = {
+                year: 'numeric', month: 'short', day: 'numeric',
+                hour: '2-digit', minute: '2-digit', second: '2-digit',
+                hour12: false
+            };
+            return new Date(date).toLocaleString('en-US', options);
+        }
+
+        // Function to display error messages
+        function showErrorMessage(message) {
+            errorText.textContent = message;
+            errorMessage.classList.remove('hidden');
+        }
+
+        // Function to hide error messages
+        function hideErrorMessage() {
+            errorMessage.classList.add('hidden');
+            errorText.textContent = '';
+        }
+
+        // Function to show the analysis modal
+        function showAnalysisModal(title, content) {
+            analysisModalTitle.textContent = title;
+            analysisText.textContent = content;
+            analysisLoading.classList.add('hidden'); // Hide loading if content is provided
+            analysisModal.style.display = 'flex';
+        }
+
+        // Function to close the analysis modal
+        function closeAnalysisModal() {
+            analysisModal.style.display = 'none';
+            analysisText.textContent = ''; // Clear content on close
+        }
+
+        // Function to render data into a table
+        function renderTable(data, tableBodyElement, highlightedSymbols = new Set()) {
+            tableBodyElement.innerHTML = ''; // Clear existing rows
+            if (data.length === 0) {
+                tableBodyElement.innerHTML = '<tr><td colspan="5" class="text-center text-gray-500 py-4">No data available.</td></tr>';
+                return;
+            }
+
+            data.forEach((coin, index) => {
+                const row = document.createElement('tr');
+                const isHighlighted = highlightedSymbols.has(coin.symbol);
+                const gainClass = parseFloat(coin.gainPercent) >= 0 ? 'gain-positive' : 'gain-negative';
+
+                row.innerHTML = `
+                    <td>${index + 1}</td>
+                    <td class="${isHighlighted ? 'highlighted-coin' : ''}">${coin.symbol}</td>
+                    <td>$${parseFloat(coin.price).toFixed(2)}</td>
+                    <td class="${gainClass}">${parseFloat(coin.gainPercent).toFixed(2)}%</td>
+                    <td>
+                        <button class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-1 px-3 rounded-md text-sm transition duration-300 ease-in-out get-analysis-btn"
+                                data-symbol="${coin.symbol}"
+                                data-price="${parseFloat(coin.price).toFixed(2)}"
+                                data-gain="${parseFloat(coin.gainPercent).toFixed(2)}">
+                            ✨ Info
+                        </button>
+                    </td>
+                `;
+                tableBodyElement.appendChild(row);
+            });
+
+            // Add event listeners to the new "Info" buttons
+            tableBodyElement.querySelectorAll('.get-analysis-btn').forEach(button => {
+                button.addEventListener('click', (event) => {
+                    const symbol = event.target.dataset.symbol;
+                    const price = event.target.dataset.price;
+                    const gain = event.target.dataset.gain;
+                    getGeminiAnalysis(symbol, price, gain);
+                });
+            });
+        }
+
+        // Function to find common symbols between two lists of gainers
+        function findCommonSymbols(list1, list2) {
+            const symbols1 = new Set(list1.map(coin => coin.symbol));
+            const common = new Set();
+            list2.forEach(coin => {
+                if (symbols1.has(coin.symbol)) {
+                    common.add(coin.symbol);
+                }
+            });
+            return common;
+        }
+
+        // Function to fetch top gainers from Binance API
+        async function fetchTopGainers() {
+            loadingIndicator.classList.remove('hidden');
+            hideErrorMessage();
+            refreshDataBtn.disabled = true;
+            refreshBtnText.textContent = 'Fetching...';
+
+            try {
+                const response = await fetch(BINANCE_API_URL);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+
+                // Filter for USDT pairs and sort by 24hr price change percentage
+                const usdtPairs = data.filter(item => item.symbol.endsWith('USDT'));
+                usdtPairs.sort((a, b) => parseFloat(b.priceChangePercent) - parseFloat(a.priceChangePercent));
+
+                // Get top N gainers
+                const topGainers = usdtPairs.slice(0, TOP_N_GAINERS).map(item => ({
+                    symbol: item.symbol,
+                    price: parseFloat(item.lastPrice),
+                    gainPercent: parseFloat(item.priceChangePercent)
+                }));
+
+                return topGainers;
+
+            } catch (error) {
+                console.error('Error fetching data from Binance API:', error);
+                showErrorMessage(`Failed to fetch data: ${error.message}. Please try again.`);
+                return [];
+            } finally {
+                loadingIndicator.classList.add('hidden');
+                refreshDataBtn.disabled = false;
+                refreshBtnText.textContent = 'Refresh Data';
+            }
+        }
+
+        // Function to fetch historical klines data
+        async function fetchKlinesData(symbol, interval, limit) {
+            const url = `${BINANCE_KLINES_API_URL}?symbol=${symbol}&interval=${interval}&limit=${limit}`;
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                // klines data format: [open time, open, high, low, close, volume, close time, ...]
+                // We need high (2), low (3), close (4)
+                return data.map(kline => ({
+                    openTime: kline[0],
+                    open: parseFloat(kline[1]),
+                    high: parseFloat(kline[2]),
+                    low: parseFloat(kline[3]),
+                    close: parseFloat(kline[4])
+                }));
+            } catch (error) {
+                console.error(`Error fetching klines for ${symbol}:`, error);
+                return [];
+            }
+        }
+
+        // Function to get cryptocurrency analysis using Gemini API
+        async function getGeminiAnalysis(symbol, price, gain) {
+            showAnalysisModal(`Analysis for ${symbol}`, ''); // Show modal with title, clear content
+            analysisLoading.classList.remove('hidden'); // Show loading spinner
+            analysisText.textContent = ''; // Clear any previous text
+
+            try {
+                // Fetch historical daily klines data for trend analysis (e.g., last 7 days)
+                const klines = await fetchKlinesData(symbol, '1d', 7); // 1-day interval, last 7 candles
+
+                let klinesDataForPrompt = 'Historical daily prices (Open, High, Low, Close):\n';
+                if (klines.length > 0) {
+                    klines.forEach(k => {
+                        klinesDataForPrompt += `  ${formatDateTime(k.openTime)}: O:${k.open.toFixed(2)}, H:${k.high.toFixed(2)}, L:${k.low.toFixed(2)}, C:${k.close.toFixed(2)}\n`;
+                    });
+                } else {
+                    klinesDataForPrompt += '  No recent historical data available for trend analysis.\n';
+                }
+
+                const prompt = `Provide a brief, neutral market overview and potential factors influencing the recent performance of ${symbol} cryptocurrency, considering its current price of $${price} and 24-hour gain of ${gain}%. Also, analyze the following historical daily price data for trend patterns (e.g., higher highs/higher lows for uptrend, or lower lows/lower highs for downtrend). Do not give financial advice.\n\n${klinesDataForPrompt}`;
+                
+                let chatHistory = [];
+                chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+
+                const payload = { contents: chatHistory };
+                const apiKey = ""; // API key will be provided by the environment
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                // Log the raw response for debugging
+                const rawResponseText = await response.text();
+                console.log('Raw API Response:', rawResponseText);
+
+                const result = JSON.parse(rawResponseText); // Parse the response text as JSON
+
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    const text = result.candidates[0].content.parts[0].text;
+                    analysisText.textContent = text;
+                } else {
+                    analysisText.textContent = 'Sorry, could not get an analysis at this time. The API response was unexpected or empty.';
+                    console.error('Unexpected API response structure or empty content:', result);
+                }
+            } catch (error) {
+                analysisText.textContent = 'An error occurred while fetching analysis. Please check your internet connection and try again.';
+                console.error('Error fetching analysis:', error);
+            } finally {
+                analysisLoading.classList.add('hidden'); // Hide loading spinner
+            }
+        }
+
+        // Function to update the separate list of previous coins
+        function updatePreviousCoinList() {
+            previousCoinList.innerHTML = ''; // Clear existing list
+            if (previousGainers.length === 0) {
+                previousCoinListContainer.classList.add('hidden');
+                return;
+            }
+
+            // Show the container
+            previousCoinListContainer.classList.remove('hidden');
+            previousCoinListTime.textContent = `Snapshot from: ${formatDateTime(sessionStorage.getItem('previousIntervalTime'))}`;
+
+            previousGainers.forEach(coin => {
+                const span = document.createElement('span');
+                span.className = 'bg-gray-700 text-gray-200 px-3 py-1 rounded-full text-sm font-medium';
+                span.textContent = coin.symbol;
+                previousCoinList.appendChild(span);
+            });
+        }
+
+
+        // Main function to update the tracker data
+        async function updateTracker() {
+            // Move current data to previous
+            previousGainers = currentGainers;
+            sessionStorage.setItem('previousGainers', JSON.stringify(previousGainers));
+            sessionStorage.setItem('previousIntervalTime', sessionStorage.getItem('currentIntervalTime') || '');
+
+            // Fetch new current data
+            currentGainers = await fetchTopGainers();
+            sessionStorage.setItem('currentGainers', JSON.stringify(currentGainers));
+
+            // Update timestamps
+            const now = new Date();
+            lastUpdatedText.textContent = `Last updated: ${formatDateTime(now)}`;
+            currentIntervalTime.textContent = `Current Interval (24h Change): ${formatDateTime(now)}`;
+            // Use the stored previous time for the previous interval display
+            previousIntervalTime.textContent = `Previous Interval (24h Change): ${formatDateTime(sessionStorage.getItem('previousIntervalTime'))}`;
+
+            // Reset and start the auto-refresh timer
+            startAutoRefreshTimer();
+
+            // Find common symbols for highlighting
+            const commonSymbols = findCommonSymbols(currentGainers, previousGainers);
+
+            // Render tables
+            renderTable(currentGainers, currentTableBody, commonSymbols);
+            renderTable(previousGainers, previousTableBody, commonSymbols);
+
+            // Update the separate previous coin list
+            updatePreviousCoinList();
+        }
+
+        // Function to start the auto-refresh timer
+        function startAutoRefreshTimer() {
+            // Clear any existing timer to prevent multiple timers running
+            if (refreshTimer) {
+                clearInterval(refreshTimer);
+            }
+
+            let timeLeft = AUTO_REFRESH_INTERVAL_MINUTES * 60; // Convert minutes to seconds
+
+            // Update the countdown every second
+            refreshTimer = setInterval(() => {
+                timeLeft--;
+                const minutes = Math.floor(timeLeft / 60);
+                const seconds = timeLeft % 60;
+                nextRefreshText.textContent = `Next refresh in: ${minutes.toString().padStart(2, '0')}m ${seconds.toString().padStart(2, '0')}s`;
+
+                if (timeLeft <= 0) {
+                    clearInterval(refreshTimer); // Stop the countdown
+                    updateTracker(); // Trigger a refresh
+                }
+            }, 1000); // Update every 1 second
+        }
+
+
+        // Initialize the tracker on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            // Load previous data from session storage if available
+            const storedPreviousGainers = sessionStorage.getItem('previousGainers');
+            if (storedPreviousGainers) {
+                previousGainers = JSON.parse(storedPreviousGainers);
+            }
+
+            // Set initial interval times from session storage or default
+            previousIntervalTime.textContent = `Previous Interval (24h Change): ${formatDateTime(sessionStorage.getItem('previousIntervalTime'))}`;
+
+            // Perform initial data fetch and render
+            updateTracker(); // This will also start the auto-refresh timer
+        });
+
+        // Add event listener to the manual refresh button
+        refreshDataBtn.addEventListener('click', updateTracker);
+    </script>
+</body>
+</html>
